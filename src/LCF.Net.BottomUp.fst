@@ -2,22 +2,25 @@ module LCF.Net.BottomUp
 
 open FStar.Tactics
 open LCF.Util
+open LCF.Map
 
 // TODO: more efficient associative datastructure
+type app_map = map nat (=) (option nat & map nat (=) nat)
+
 noeq type net (a:Type0) =
   {
-    fvar: list (fv & nat);
-    app: list ((nat & (option nat)) & nat);
+    fvar: map fv fv_eq nat;
+    app: app_map;
     next_state: nat;
-    state_to_a: list (nat & a)
+    state_to_a: map nat (=) (list a)
   }
 
 val empty_net: #a:Type0 -> net a
 let empty_net #a =
-  { fvar = []
-  ; app = []
+  { fvar = map_empty
+  ; app = map_empty
   ; next_state = 0
-  ; state_to_a = []
+  ; state_to_a = map_empty
   }
 
 val term_to_state: #a:Type0 -> net a -> term -> Tac (list nat)
@@ -25,25 +28,55 @@ let rec term_to_state #a trans t =
   match (inspect t) with
   | Tv_FVar fv ->
     begin
-      Tactics.Util.fold_right (fun (fv2, st) acc -> if fv_eq fv fv2 then st::acc else acc) (trans.fvar) []
+      option_to_list (map_lookup trans.fvar fv)
     end
   | Tv_App hd argv ->
     begin
       let sts1 = term_to_state trans hd in
-      let sts2 = term_to_state trans (fst argv) in
-      Tactics.Util.fold_right (fun ((st1, ost2), str) acc ->
-        let ok (ost:option nat) (sts:list nat) =
-          match ost with
-          | Some st -> List.Tot.mem #nat st sts
-          | None -> true
-        in
-        let ok1 = List.Tot.mem #nat st1 sts1 in //ok ost1 sts1 in
-        let ok2 = ok ost2 sts2 in
-        if ok1 && ok2 then str::acc
-        else acc
-      ) (trans.app) []
+      concat_map (fun st1 ->
+        match map_lookup trans.app st1 with
+        | None -> []
+        | Some (stres, st2map) ->
+          if map_is_empty st2map then
+            option_to_list stres
+          else (
+            let sts2 = term_to_state trans (fst argv) in
+            (option_to_list stres)@(
+              List.Tot.concatMap (fun st2 ->
+                option_to_list (map_lookup st2map st2)
+              ) sts2
+            )
+          )
+      ) sts1
     end
   | _ -> []
+
+val app_map_lookup: app_map -> (nat & option nat) -> option nat
+let app_map_lookup m (v1, ov2) =
+  match map_lookup m v1 with
+  | None -> None
+  | Some (v2none, v2map) ->
+    begin
+      match ov2 with
+      | None -> v2none
+      | Some v2 -> map_lookup v2map v2
+    end
+
+val app_map_insert: app_map -> (nat & option nat) -> nat -> app_map
+let app_map_insert m (v1, ov2) y =
+  match map_lookup m v1 with
+  | None ->
+    begin
+      match ov2 with
+      | None -> map_insert m v1 (Some y, map_empty)
+      | Some v2 -> map_insert m v1 (None, map_insert map_empty v2 y)
+    end
+  | Some (v2none, v2map) ->
+    begin
+      match ov2 with
+      | None -> map_insert m v1 (Some y, v2map)
+      | Some v2 -> map_insert m v1 (v2none, map_insert v2map v2 y)
+    end
 
 val add_term_aux: #a:Type0 -> net a -> term -> Tac (net a & option nat)
 let rec add_term_aux #a trans t =
@@ -51,17 +84,17 @@ let rec add_term_aux #a trans t =
   | Tv_FVar fv ->
     begin
       let t_state = term_to_state trans t in
-      match t_state with
-      | [] ->
+      match map_lookup trans.fvar fv with
+      | None ->
         (
-          { fvar = (fv, trans.next_state)::trans.fvar
+          { fvar = map_insert trans.fvar fv trans.next_state
           ; app = trans.app
           ; next_state = trans.next_state+1
           ; state_to_a = trans.state_to_a
           },
           Some (trans.next_state)
         )
-      | [st] -> (trans, Some st)
+      | Some st -> (trans, Some st)
       | _ -> fail "BottomUp.add_term_aux: too many states for free variable"
     end
   | Tv_App hd argv ->
@@ -71,7 +104,7 @@ let rec add_term_aux #a trans t =
       match ost1 with
       | Some st1 ->
         begin
-          let ost = List.Tot.assoc (st1, ost2) trans.app in
+          let ost = app_map_lookup trans.app (st1, ost2) in
           match ost with
           | Some st ->
             (trans, Some st)
@@ -79,7 +112,7 @@ let rec add_term_aux #a trans t =
             begin
               (
                 { fvar = trans.fvar
-                ; app = ((st1, ost2), trans.next_state)::trans.app
+                ; app = app_map_insert trans.app (st1, ost2) trans.next_state
                 ; next_state = trans.next_state + 1
                 ; state_to_a = trans.state_to_a
                 },
@@ -100,7 +133,10 @@ let add_term #a trans t x =
       { fvar = trans.fvar
       ; app = trans.app
       ; next_state = trans.next_state
-      ; state_to_a = (st,x)::(trans.state_to_a)
+      ; state_to_a =
+        match map_lookup trans.state_to_a st with
+        | Some l -> map_insert trans.state_to_a st (x::l)
+        | None -> map_insert trans.state_to_a st [x]
       }
     end
   | (_, None) -> fail "BottomUp.add_term: add_term_aux didn't return a Some"
@@ -110,9 +146,9 @@ let match_term #a trans t =
   let sts = term_to_state trans t in
   //print ((join_strings ", " (List.Tot.map nat_to_string sts)) ^ "\n");
   List.Tot.fold_right (fun st acc ->
-    List.Tot.fold_right (fun (stx, x) acc2 ->
-      if st = stx then x::acc2 else acc2
-    ) trans.state_to_a acc
+    match map_lookup trans.state_to_a st with
+    | Some l -> l@acc
+    | None -> acc
   ) sts []
 
 let merge_net #a x y = fail "BottomUp.merge: not implemented"

@@ -31,9 +31,15 @@ let rec join_strings joiner l =
   | h::t -> h ^ joiner ^ join_strings joiner t
 
 
-val fv_eq: fv -> fv -> Tac bool
+val fv_eq: fv -> fv -> bool
 let fv_eq fv1 fv2 =
-  term_eq (pack (Tv_FVar fv1)) (pack (Tv_FVar fv2))
+  (inspect_fv fv1) = (inspect_fv fv2)
+
+val option_to_list: #a:Type -> option a -> list a
+let option_to_list opt =
+  match opt with
+  | Some x -> [x]
+  | None -> []
 
 val get_lhs_from_lemma: term -> Tac term
 let get_lhs_from_lemma t =
@@ -60,3 +66,9 @@ let get_lhs_from_lemma t =
       )
     end
   | _ -> fail "not a lemma"
+
+val concat_map: #a:Type -> #b:Type -> (a -> Tac (list b)) -> list a -> Tac (list b)
+let rec concat_map #a #b f l =
+  match l with
+  | [] -> []
+  | h::t -> (f h)@(concat_map f t)
