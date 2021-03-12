@@ -1,5 +1,7 @@
 module LCF.Map
 
+// TODO: more efficient associative datastructure
+
 type cmp_on (a:Type0) =
   a -> a -> bool
 

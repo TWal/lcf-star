@@ -16,6 +16,10 @@ noeq type net (a:Type0) =
   }
 
 val empty_net: #a:Type0 -> net a
+val add_term: #a:Type0 -> net a -> term -> a -> Tac (net a)
+val match_term: #a:Type0 -> net a -> term -> Tac (list a)
+val merge_net: #a:Type0 -> net a -> net a -> Tac (list a)
+
 let empty_net #a =
   { fvar = map_empty
   ; app = map_empty
@@ -124,7 +128,6 @@ let rec add_term_aux #a trans t =
     end
   | _ -> (trans, None)
 
-val add_term: #a:Type0 -> net a -> term -> a -> Tac (net a)
 let add_term #a trans t x =
   match add_term_aux trans t with
   | (trans, Some st) ->
@@ -141,7 +144,6 @@ let add_term #a trans t x =
     end
   | (_, None) -> fail "BottomUp.add_term: add_term_aux didn't return a Some"
 
-val match_term: #a:Type0 -> net a -> term -> Tac (list a)
 let match_term #a trans t =
   let sts = term_to_state trans t in
   //print ((join_strings ", " (List.Tot.map nat_to_string sts)) ^ "\n");

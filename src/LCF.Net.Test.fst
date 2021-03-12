@@ -1,7 +1,7 @@
 module LCF.Net.Test
 
 open FStar.Tactics
-open LCF.Net.BottomUp
+open LCF.Net.HOL4
 open LCF.Util
 
 val add_lemma: #a:Type0 -> net a -> term -> a -> Tac (net a)
