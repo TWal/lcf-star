@@ -1,6 +1,9 @@
 module LCF.Util
 
 open FStar.Tactics
+open LCF.Map //for cmp_on
+
+
 
 val digit_to_string: n:nat{n<10} -> string
 let digit_to_string n =
@@ -72,3 +75,27 @@ let rec concat_map #a #b f l =
   match l with
   | [] -> []
   | h::t -> (f h)@(concat_map f t)
+
+val cmp_on_int: cmp_on int
+let cmp_on_int x y =
+  if x < y then Lt
+  else if x = y then Eq
+  else Gt
+
+val cmp_on_nat: cmp_on nat
+let cmp_on_nat =
+  cmp_on_int
+
+
+val cmp_on_char: cmp_on FStar.Char.char
+let cmp_on_char c1 c2 =
+  cmp_on_int (FStar.Char.int_of_char c1) (FStar.Char.int_of_char c2)
+
+//TODO: use String.Compare?
+val cmp_on_string: cmp_on string
+let cmp_on_string s1 s2 =
+  cmp_on_list cmp_on_char (FStar.String.list_of_string s1) (FStar.String.list_of_string s2)
+
+val cmp_on_fv: cmp_on fv
+let cmp_on_fv fv1 fv2 =
+  cmp_on_list cmp_on_string (inspect_fv fv1) (inspect_fv fv2)

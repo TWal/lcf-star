@@ -4,20 +4,13 @@ open FStar.Tactics
 open LCF.Util
 open LCF.Map
 
-val ofvnat_cmp: option (fv*nat) -> option (fv*nat) -> bool
-let ofvnat_cmp x1 x2 =
-  match x1, x2 with
-  | Some (fv1, n1), Some (fv2, n2) ->
-    if n1 = n2 then
-      fv_eq fv1 fv2
-    else
-      false
-  | None, None -> true
-  | _, _ -> false
+val cmp_on_ofvnat: cmp_on (option (fv*nat))
+let cmp_on_ofvnat =
+  cmp_on_option (cmp_on_lex cmp_on_fv cmp_on_nat)
 
 noeq type net (a:Type0) =
   | NetEnd: list a -> net a
-  | NetCont: map (option (fv*nat)) ofvnat_cmp (net a) -> net a
+  | NetCont: map (option (fv*nat)) cmp_on_ofvnat (net a) -> net a
 
 val empty_net: #a:Type0 -> net a
 val add_term: #a:Type0 -> net a -> term -> a -> Tac (net a)

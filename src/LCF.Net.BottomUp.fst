@@ -4,15 +4,14 @@ open FStar.Tactics
 open LCF.Util
 open LCF.Map
 
-// TODO: more efficient associative datastructure
-type app_map = map nat (=) (option nat & map nat (=) nat)
+type app_map = map nat cmp_on_nat (option nat & map nat cmp_on_nat nat)
 
 noeq type net (a:Type0) =
   {
-    fvar: map fv fv_eq nat;
+    fvar: map fv cmp_on_fv nat;
     app: app_map;
     next_state: nat;
-    state_to_a: map nat (=) (list a)
+    state_to_a: map nat cmp_on_nat (list a)
   }
 
 val empty_net: #a:Type0 -> net a
